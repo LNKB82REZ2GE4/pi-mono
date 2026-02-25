@@ -59,6 +59,18 @@ export {
 	truncateTail,
 } from "./truncate.js";
 export {
+	createWebReadTool,
+	type WebReadToolDetails,
+	type WebReadToolInput,
+	webReadTool,
+} from "./web-read.js";
+export {
+	createWebSearchTool,
+	type WebSearchToolDetails,
+	type WebSearchToolInput,
+	webSearchTool,
+} from "./web-search.js";
+export {
 	createWriteTool,
 	type WriteOperations,
 	type WriteToolInput,
@@ -73,16 +85,18 @@ import { createFindTool, findTool } from "./find.js";
 import { createGrepTool, grepTool } from "./grep.js";
 import { createLsTool, lsTool } from "./ls.js";
 import { createReadTool, type ReadToolOptions, readTool } from "./read.js";
+import { webReadTool } from "./web-read.js";
+import { webSearchTool } from "./web-search.js";
 import { createWriteTool, writeTool } from "./write.js";
 
 /** Tool type (AgentTool from pi-ai) */
 export type Tool = AgentTool<any>;
 
 // Default tools for full access mode (using process.cwd())
-export const codingTools: Tool[] = [readTool, bashTool, editTool, writeTool];
+export const codingTools: Tool[] = [readTool, bashTool, editTool, writeTool, webSearchTool, webReadTool];
 
 // Read-only tools for exploration without modification (using process.cwd())
-export const readOnlyTools: Tool[] = [readTool, grepTool, findTool, lsTool];
+export const readOnlyTools: Tool[] = [readTool, grepTool, findTool, lsTool, webSearchTool, webReadTool];
 
 // All available tools (using process.cwd())
 export const allTools = {
@@ -93,6 +107,8 @@ export const allTools = {
 	grep: grepTool,
 	find: findTool,
 	ls: lsTool,
+	web_search: webSearchTool,
+	web_read: webReadTool,
 };
 
 export type ToolName = keyof typeof allTools;
@@ -113,6 +129,8 @@ export function createCodingTools(cwd: string, options?: ToolsOptions): Tool[] {
 		createBashTool(cwd, options?.bash),
 		createEditTool(cwd),
 		createWriteTool(cwd),
+		webSearchTool,
+		webReadTool,
 	];
 }
 
@@ -120,7 +138,14 @@ export function createCodingTools(cwd: string, options?: ToolsOptions): Tool[] {
  * Create read-only tools configured for a specific working directory.
  */
 export function createReadOnlyTools(cwd: string, options?: ToolsOptions): Tool[] {
-	return [createReadTool(cwd, options?.read), createGrepTool(cwd), createFindTool(cwd), createLsTool(cwd)];
+	return [
+		createReadTool(cwd, options?.read),
+		createGrepTool(cwd),
+		createFindTool(cwd),
+		createLsTool(cwd),
+		webSearchTool,
+		webReadTool,
+	];
 }
 
 /**
@@ -135,5 +160,7 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		grep: createGrepTool(cwd),
 		find: createFindTool(cwd),
 		ls: createLsTool(cwd),
+		web_search: webSearchTool,
+		web_read: webReadTool,
 	};
 }

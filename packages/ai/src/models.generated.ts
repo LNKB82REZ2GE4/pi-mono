@@ -11447,7 +11447,7 @@ export const MODELS = {
 		} satisfies Model<"anthropic-messages">,
 		"openai/gpt-5-chat": {
 			id: "openai/gpt-5-chat",
-			name: "GPT-5 Chat",
+			name: "GPT 5 Chat",
 			api: "anthropic-messages",
 			provider: "vercel-ai-gateway",
 			baseUrl: "https://ai-gateway.vercel.sh",
@@ -11566,7 +11566,7 @@ export const MODELS = {
 		} satisfies Model<"anthropic-messages">,
 		"openai/gpt-5.1-codex-mini": {
 			id: "openai/gpt-5.1-codex-mini",
-			name: "GPT-5.1 Codex mini",
+			name: "GPT 5.1 Codex Mini",
 			api: "anthropic-messages",
 			provider: "vercel-ai-gateway",
 			baseUrl: "https://ai-gateway.vercel.sh",
@@ -11634,7 +11634,7 @@ export const MODELS = {
 		} satisfies Model<"anthropic-messages">,
 		"openai/gpt-5.2-chat": {
 			id: "openai/gpt-5.2-chat",
-			name: "GPT-5.2 Chat",
+			name: "GPT 5.2 Chat",
 			api: "anthropic-messages",
 			provider: "vercel-ai-gateway",
 			baseUrl: "https://ai-gateway.vercel.sh",
@@ -11651,7 +11651,7 @@ export const MODELS = {
 		} satisfies Model<"anthropic-messages">,
 		"openai/gpt-5.2-codex": {
 			id: "openai/gpt-5.2-codex",
-			name: "GPT-5.2-Codex",
+			name: "GPT 5.2 Codex",
 			api: "anthropic-messages",
 			provider: "vercel-ai-gateway",
 			baseUrl: "https://ai-gateway.vercel.sh",
