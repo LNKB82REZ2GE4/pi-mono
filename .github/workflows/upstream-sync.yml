@@ -1,0 +1,112 @@
+name: Upstream Sync
+
+on:
+  schedule:
+    # Run daily at 6:00 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    # Allow manual trigger
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/badlogic/pi-mono.git
+
+      - name: Fetch upstream
+        run: git fetch upstream
+
+      - name: Check for upstream changes
+        id: check
+        run: |
+          BEHIND=$(git rev-list --count HEAD..upstream/main)
+          echo "behind=$BEHIND" >> $GITHUB_OUTPUT
+          
+          if [ "$BEHIND" -gt 0 ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "### 📥 Upstream has $BEHIND new commit(s):" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            git log --oneline HEAD..upstream/main >> $GITHUB_STEP_SUMMARY
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "### ✅ Already up to date with upstream" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check for existing PR
+        id: existing_pr
+        if: steps.check.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          EXISTING=$(gh pr list --head "upstream-sync" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "number=$EXISTING" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create sync branch
+        if: steps.check.outputs.has_changes == 'true' && steps.existing_pr.outputs.exists != 'true'
+        run: |
+          git checkout -b upstream-sync
+          git merge upstream/main --no-edit || {
+            echo "### ⚠️ Merge conflicts detected" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The PR will be created with conflicts. Resolve them manually." >> $GITHUB_STEP_SUMMARY
+            git add -A
+            git commit -m "Merge upstream with conflicts" || true
+          }
+
+      - name: Push sync branch
+        if: steps.check.outputs.has_changes == 'true' && steps.existing_pr.outputs.exists != 'true'
+        run: git push origin upstream-sync --force
+
+      - name: Create PR
+        if: steps.check.outputs.has_changes == 'true' && steps.existing_pr.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COMMITS=$(git log --oneline main..upstream/main | head -20)
+          BEHIND=${{ steps.check.outputs.behind }}
+          
+          gh pr create \
+            --title "🔄 Sync upstream: $BEHIND new commit(s)" \
+            --body "$(cat <<'EOF'
+          ## Upstream Sync
+
+          This PR brings in the latest changes from [badlogic/pi-mono](https://github.com/badlogic/pi-mono).
+
+          ### New Commits ($BEHIND total)
+          ```
+          $COMMITS
+          ```
+
+          ---
+
+          **Instructions:**
+          1. Review the changes below
+          2. Resolve any merge conflicts if present
+          3. Merge when ready
+          4. Delete this branch after merging
+
+          _This PR was automatically created by the [Upstream Sync](/.github/workflows/upstream-sync.yml) workflow._
+          EOF
+          )" \
+            --label "upstream-sync"
