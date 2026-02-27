@@ -143,11 +143,21 @@ function playWav(path: string): Promise<void> {
 	});
 }
 
+type ServerResult = "ok" | "error" | "unreachable";
+
 /**
  * Fast path: send synthesis request to the persistent TTS server.
- * Returns true if successful, false if the server is unreachable or errors.
+ *
+ * Returns:
+ *   "ok"          — synthesis succeeded, audio played
+ *   "error"       — server responded (non-200) or timed out; GPU likely occupied
+ *   "unreachable" — connection refused; server is not running
  */
-async function speakViaServer(text: string, voice: TtsVoiceProfile, settings: ResolvedTtsSettings): Promise<boolean> {
+async function speakViaServer(
+	text: string,
+	voice: TtsVoiceProfile,
+	settings: ResolvedTtsSettings,
+): Promise<ServerResult> {
 	try {
 		const resp = await fetch(`${TTS_SERVER_URL}/speak`, {
 			method: "POST",
@@ -158,22 +168,32 @@ async function speakViaServer(text: string, voice: TtsVoiceProfile, settings: Re
 				ref_text: voice.refText,
 				speed: settings.speed,
 			}),
-			signal: AbortSignal.timeout(30_000),
+			signal: AbortSignal.timeout(60_000),
 		});
 
 		if (!resp.ok) {
-			console.error(`TTS server returned ${resp.status}`);
-			return false;
+			const body = await resp.text().catch(() => "");
+			console.error(`TTS server error ${resp.status}: ${body.slice(0, 300)}`);
+			return "error";
 		}
 
 		const wavBytes = new Uint8Array(await resp.arrayBuffer());
 		const tmpFile = "/tmp/pi-tts-output.wav";
 		await writeFile(tmpFile, wavBytes);
 		await playWav(tmpFile);
-		return true;
-	} catch {
-		// Server not running or network error — caller will fall back to subprocess
-		return false;
+		return "ok";
+	} catch (err) {
+		// Distinguish "server not running" from other failures
+		const msg =
+			err instanceof Error
+				? err.message + (err.cause instanceof Error ? ` (${err.cause.message})` : "")
+				: String(err);
+		const isUnreachable =
+			msg.includes("ECONNREFUSED") || msg.includes("ENOENT") || msg.includes("connection refused");
+		if (!isUnreachable) {
+			console.error(`TTS server request failed: ${msg}`);
+		}
+		return isUnreachable ? "unreachable" : "error";
 	}
 }
 
@@ -229,11 +249,20 @@ async function speak(text: string, voice: TtsVoiceProfile, settings: ResolvedTts
 		return;
 	}
 
-	// Try the warm server first (fast). Fall back to cold subprocess if unavailable.
-	if (await speakViaServer(text, voice, settings)) {
+	const result = await speakViaServer(text, voice, settings);
+
+	if (result === "ok") {
 		return;
 	}
 
+	if (result === "error") {
+		// Server is reachable but failed — the GPU is likely occupied by the TTS
+		// container. Do NOT fall back to subprocess, which would compete for the
+		// same VRAM and OOM.
+		return;
+	}
+
+	// result === "unreachable": server is not running, safe to use subprocess
 	await speakViaSubprocess(text, voice, settings);
 }
 
