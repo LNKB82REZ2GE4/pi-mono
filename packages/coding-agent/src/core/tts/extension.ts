@@ -211,16 +211,16 @@ async function speakViaSubprocess(text: string, voice: TtsVoiceProfile, settings
 		"-t",
 		text,
 		"-d",
-		"auto",
+		"cpu", // Always CPU in subprocess fallback — GPU is likely occupied by TTS server
 		"--speed",
 		String(settings.speed),
 		"-o",
 		"/tmp/pi-tts-output.wav",
 	];
 
-	// Remove CUDA_VISIBLE_DEVICES so the subprocess can see all GPUs
-	const env = { ...process.env };
-	delete env.CUDA_VISIBLE_DEVICES;
+	// Block all GPU visibility for the fallback subprocess — belt-and-suspenders
+	// to ensure it cannot compete with the TTS Docker container for VRAM.
+	const env = { ...process.env, CUDA_VISIBLE_DEVICES: "" };
 
 	await new Promise<void>((resolve, reject) => {
 		const proc = spawn(ttsCli, args, { stdio: ["ignore", "pipe", "pipe"], env });
