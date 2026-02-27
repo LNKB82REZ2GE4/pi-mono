@@ -73,7 +73,47 @@ function truncateText(text: string, maxLength: number): string {
 	if (normalized.length <= maxLength) {
 		return normalized;
 	}
-	return `${normalized.slice(0, maxLength - 3)}...`;
+	// Truncate at a sentence boundary if possible
+	const truncated = normalized.slice(0, maxLength - 3);
+	const lastPeriod = truncated.lastIndexOf(".");
+	if (lastPeriod > maxLength * 0.5) {
+		return `${truncated.slice(0, lastPeriod + 1)}`;
+	}
+	return `${truncated}...`;
+}
+
+/**
+ * Remove markdown formatting so the text reads naturally when spoken.
+ * Code blocks and inline code are removed entirely (not spoken as "[code block]")
+ * because they're not meaningful out loud.
+ */
+function stripMarkdownForSpeech(text: string): string {
+	return (
+		text
+			// Remove fenced code blocks (language tag and body)
+			.replace(/```[\s\S]*?```/g, "")
+			// Remove indented code blocks (4-space or tab-indented lines)
+			.replace(/^( {4}|\t).+$/gm, "")
+			// Remove inline code
+			.replace(/`[^`\n]+`/g, "")
+			// Strip markdown headers
+			.replace(/^#{1,6}\s+/gm, "")
+			// Strip bold/italic (preserve inner text)
+			.replace(/\*{1,3}([^*\n]+)\*{1,3}/g, "$1")
+			.replace(/_{1,3}([^_\n]+)_{1,3}/g, "$1")
+			// Strip links (preserve display text)
+			.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+			// Strip bare URLs
+			.replace(/https?:\/\/\S+/g, "")
+			// Strip horizontal rules
+			.replace(/^[-*_]{3,}\s*$/gm, "")
+			// Collapse multiple blank lines to one
+			.replace(/\n{3,}/g, "\n\n")
+			// Normalize spaces within lines
+			.replace(/[ \t]+/g, " ")
+			.replace(/^ +/gm, "")
+			.trim()
+	);
 }
 
 function extractAnnouncementText(message: AgentMessage, maxLength: number): string | null {
@@ -82,35 +122,12 @@ function extractAnnouncementText(message: AgentMessage, maxLength: number): stri
 		return null;
 	}
 
-	// For assistant messages, try to extract the key information
-	// Skip very long responses or code-heavy content
-	const codeBlocks = (text.match(/```[\s\S]*?```/g) || []).length;
-	if (codeBlocks > 2) {
-		// Too much code - just announce completion
-		return "Task completed with code changes.";
+	const cleaned = stripMarkdownForSpeech(text);
+	if (!cleaned) {
+		return null;
 	}
 
-	// Check for common completion patterns
-	const lowerText = text.toLowerCase();
-	if (lowerText.includes("i've completed") || lowerText.includes("i have completed")) {
-		// Extract the completion message
-		const match = text.match(/(?:i've|i have) completed[^.]*\./i);
-		if (match) {
-			return truncateText(match[0], maxLength);
-		}
-	}
-
-	if (lowerText.includes("done") || lowerText.includes("finished")) {
-		return "Task completed.";
-	}
-
-	// For short messages, read the whole thing
-	if (text.length < maxLength) {
-		return truncateText(text, maxLength);
-	}
-
-	// For longer messages, just announce completion
-	return "Task completed.";
+	return truncateText(cleaned, maxLength);
 }
 
 function playWav(path: string): Promise<void> {
@@ -220,26 +237,50 @@ async function speak(text: string, voice: TtsVoiceProfile, settings: ResolvedTts
 	await speakViaSubprocess(text, voice, settings);
 }
 
-function getVoiceForAgent(agentName: string | undefined, settings: ResolvedTtsSettings): TtsVoiceProfile {
-	if (!agentName) {
-		return settings.voices[settings.defaultVoice] || { ref: "", refText: "" };
-	}
-
-	// Check agent-specific voice mapping
-	const voiceName = settings.agentVoices[agentName] || settings.defaultVoice;
-	return settings.voices[voiceName] || settings.voices[settings.defaultVoice] || { ref: "", refText: "" };
-}
-
 export function createTtsExtension(settings: ResolvedTtsSettings): ExtensionFactory {
 	return function ttsExtension(pi) {
 		if (!settings.enabled) {
 			return;
 		}
 
-		// Check if TTS CLI exists
-		const _ttsCli = process.env.TTS_CLI_PATH || "/home/jake/.local/bin/tts-clone";
+		// Register a per-instance voice override flag.
+		// Usage: pi --tts-voice alice  (or set PI_TTS_VOICE=alice in the environment)
+		// This lets multiple parallel pi instances each have a distinct voice.
+		pi.registerFlag("tts-voice", {
+			description: "Override TTS voice profile for this instance (name from settings.tts.voices)",
+			type: "string",
+			default: "",
+		});
 
-		pi.on("turn_end", async (event, _ctx) => {
+		/**
+		 * Resolve which voice profile to use.
+		 * Priority: --tts-voice flag > PI_TTS_VOICE env var > agentVoices[model.id] > defaultVoice
+		 */
+		function getVoice(ctx: { model: { id: string; name: string } | undefined }): TtsVoiceProfile {
+			const fallback: TtsVoiceProfile = settings.voices[settings.defaultVoice] ?? { ref: "", refText: "" };
+
+			// 1. Explicit CLI flag
+			const flag = String(pi.getFlag("tts-voice") ?? "").trim();
+			if (flag && settings.voices[flag]) return settings.voices[flag];
+
+			// 2. Environment variable (useful in launch scripts)
+			const envVoice = (process.env.PI_TTS_VOICE ?? "").trim();
+			if (envVoice && settings.voices[envVoice]) return settings.voices[envVoice];
+
+			// 3. Per-model mapping (agentVoices: { "claude-sonnet-4-20250514": "alice" })
+			const model = ctx.model;
+			if (model) {
+				const byId = settings.agentVoices[model.id];
+				if (byId && settings.voices[byId]) return settings.voices[byId];
+				const byName = settings.agentVoices[model.name];
+				if (byName && settings.voices[byName]) return settings.voices[byName];
+			}
+
+			// 4. Default
+			return fallback;
+		}
+
+		pi.on("turn_end", async (event, ctx) => {
 			if (!settings.events.turnEnd) {
 				return;
 			}
@@ -254,7 +295,7 @@ export function createTtsExtension(settings: ResolvedTtsSettings): ExtensionFact
 				return;
 			}
 
-			const voice = getVoiceForAgent(undefined, settings); // TODO: get actual agent name
+			const voice = getVoice(ctx);
 
 			try {
 				await speak(text, voice, settings);
@@ -263,12 +304,12 @@ export function createTtsExtension(settings: ResolvedTtsSettings): ExtensionFact
 			}
 		});
 
-		pi.on("agent_end", async (event, _ctx) => {
+		pi.on("agent_end", async (event, ctx) => {
 			if (!settings.events.agentEnd) {
 				return;
 			}
 
-			// Find the last assistant message
+			// Find the last assistant message to summarize the session
 			const messages = event.messages as AgentMessage[];
 			const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
 			if (!lastAssistant) {
@@ -280,10 +321,10 @@ export function createTtsExtension(settings: ResolvedTtsSettings): ExtensionFact
 				return;
 			}
 
-			const voice = getVoiceForAgent(undefined, settings);
+			const voice = getVoice(ctx);
 
 			try {
-				await speak(`Session complete. ${text}`, voice, settings);
+				await speak(text, voice, settings);
 			} catch (err) {
 				console.error("TTS error:", err);
 			}
@@ -297,7 +338,7 @@ export function createTtsExtension(settings: ResolvedTtsSettings): ExtensionFact
 				const cmd = parts[0];
 
 				if (!cmd || cmd === "test") {
-					const voice = getVoiceForAgent(undefined, settings);
+					const voice = getVoice(ctx);
 					if (!voice.ref) {
 						ctx.ui.notify("No voice configured. Add a voice profile to settings.json", "warning");
 						return;
@@ -342,7 +383,7 @@ export function createTtsExtension(settings: ResolvedTtsSettings): ExtensionFact
 					return;
 				}
 
-				const voice = getVoiceForAgent(undefined, settings);
+				const voice = getVoice(ctx);
 				try {
 					await speak(text, voice, settings);
 				} catch (err) {

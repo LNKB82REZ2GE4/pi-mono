@@ -134,6 +134,138 @@ When a provider requests a retry delay longer than `maxDelayMs` (e.g., Google's 
 |---------|------|---------|-------------|
 | `markdown.codeBlockIndent` | string | `"  "` | Indentation for code blocks |
 
+### Memory (Experimental)
+
+Enable built-in long-term memory for coding-agent sessions.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `memory.enabled` | boolean | `false` | Enable built-in memory commands, retrieval, and review queue |
+| `memory.storeDir` | string | `~/.pi/agent/memory` | Memory storage location |
+| `memory.autoReindexOnStart` | boolean | `true` | Reindex Markdown memories on startup |
+| `memory.autoImportSessions` | boolean | `true` | Incrementally import session history as memory candidates |
+| `memory.autoCapture.enabled` | boolean | `true` | Auto-capture memory candidates from turns |
+| `memory.autoCapture.maxCandidatesPerTurn` | number | `8` | Candidate cap per turn |
+| `memory.retrieval.topK` | number | `6` | Max retrieved memories per prompt |
+| `memory.retrieval.maxInjectedTokens` | number | `1200` | Max memory tokens injected per prompt |
+| `memory.retrieval.includeUnreviewed` | boolean | `false` | Include unreviewed candidates in retrieval |
+| `memory.embedding.provider` | `"ollama" \| "hash"` | `"ollama"` | Embedding backend |
+| `memory.embedding.model` | string | `"nomic-embed-text"` | Embedding model ID |
+| `memory.embedding.endpoint` | string | `"http://127.0.0.1:11434"` | Ollama endpoint |
+| `memory.embedding.dimensions` | number | `384` | Hash embedding vector size |
+| `memory.embedding.gpuDevice` | string | `"0"` | Preferred embedding GPU ID (for local runtime setup) |
+| `memory.embedding.maxVramMb` | number | `2560` | Embedding VRAM budget hint |
+| `memory.manager.provider` | `"ollama" \| "heuristic"` | `"ollama"` | Candidate extraction/summarization backend |
+| `memory.manager.model` | string | `"qwen2.5:3b-instruct"` | Local manager model |
+| `memory.manager.endpoint` | string | `"http://127.0.0.1:11434"` | Ollama endpoint |
+| `memory.manager.gpuDevice` | string | `"0"` | Preferred manager GPU ID |
+| `memory.memAgent.enabled` | boolean | `true` | Enable mem-agent LLM for intelligent curation and housekeeping |
+| `memory.memAgent.model` | string | `"mem-agent-Q8_0"` | Mem-agent model name (GGUF path or Ollama model) |
+| `memory.memAgent.endpoint` | string | `"http://127.0.0.1:8765"` | Mem-agent LLM endpoint (llama.cpp server) |
+| `memory.memAgent.provider` | `"ollama" \| "llamacpp"` | `"llamacpp"` | Mem-agent backend provider |
+| `memory.memAgent.gpuDevice` | string | `"1"` | Preferred mem-agent GPU ID |
+| `memory.memAgent.maxTokens` | number | `16384` | Max generation tokens (thinking models need 16K+) |
+| `memory.memAgent.temperature` | number | `0.1` | Mem-agent sampling temperature (low for consistency) |
+| `memory.encryption.mode` | `"off" \| "on" \| "auto"` | `"auto"` | Encrypt derived index files when key is available |
+
+> Markdown memory files remain human-editable plaintext by design. Encryption applies to derived index files under `.index/` when enabled.
+
+### TTS (Text-to-Speech)
+
+Pi can announce agent responses aloud using F5-TTS voice cloning. Requires the
+TTS Docker service running on port 5052 (see the just-talk project), or the
+`tts-clone` CLI installed at `~/.local/bin/tts-clone`. Falls back gracefully
+if neither is available.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `tts.enabled` | boolean | `false` | Enable TTS announcements |
+| `tts.defaultVoice` | string | `"default"` | Voice profile name to use by default |
+| `tts.speed` | number | `1.0` | Speech rate multiplier |
+| `tts.maxLength` | number | `500` | Max characters to speak per announcement |
+| `tts.events.turnEnd` | boolean | `true` | Speak after each assistant turn |
+| `tts.events.agentEnd` | boolean | `true` | Speak when the agent session ends |
+| `tts.voices` | object | - | Named voice profiles (see below) |
+| `tts.agentVoices` | object | - | Map model IDs to voice names (see below) |
+
+#### Voice profiles
+
+Each named profile specifies a reference audio file and its transcript.
+Record 10-15 seconds of clean speech and save as WAV.
+
+```json
+{
+  "tts": {
+    "enabled": true,
+    "defaultVoice": "assistant",
+    "voices": {
+      "assistant": {
+        "ref": "~/.pi/voices/assistant.wav",
+        "refText": "Some call me nature, others call me mother nature.",
+        "description": "Default assistant voice"
+      },
+      "builder": {
+        "ref": "~/.pi/voices/builder.wav",
+        "refText": "I build things one step at a time.",
+        "description": "Voice for builder agent"
+      }
+    }
+  }
+}
+```
+
+#### Per-agent voices
+
+When running multiple pi instances in parallel, each instance can use a
+different voice so you can tell them apart.
+
+**Option 1 — CLI flag** (most flexible):
+
+```bash
+# Instance A
+pi --tts-voice assistant
+
+# Instance B
+pi --tts-voice builder
+```
+
+**Option 2 — Environment variable**:
+
+```bash
+PI_TTS_VOICE=builder pi
+```
+
+**Option 3 — Model-based routing** (`agentVoices` maps model ID → voice name):
+
+```json
+{
+  "tts": {
+    "agentVoices": {
+      "claude-opus-4-5": "assistant",
+      "claude-haiku-3-5": "builder"
+    }
+  }
+}
+```
+
+Voice resolution order: `--tts-voice` flag > `PI_TTS_VOICE` env var >
+`agentVoices[model.id]` > `defaultVoice`.
+
+#### What gets spoken
+
+Pi speaks the full text of each assistant response, minus:
+- Fenced and indented code blocks
+- Inline code
+- Markdown formatting (headers, bold, italic, links)
+- Bare URLs
+
+The result is truncated at `tts.maxLength` characters, preferring a
+sentence boundary for a natural cut-off.
+
+Use `/tts test` to hear the current voice, `/tts voices` to list configured
+voices, `/tts set <name>` to switch voice for the current session, or
+`/tts <text>` to speak arbitrary text.
+
 ### Resources
 
 These settings define where to load extensions, skills, prompts, and themes from.

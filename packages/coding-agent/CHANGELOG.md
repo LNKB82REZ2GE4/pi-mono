@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added an experimental built-in memory system for coding-agent sessions (feature-flagged via `memory.enabled`) with human-editable Markdown storage, review queue, semantic search, auto-import from session history, and scoped context injection.
+- Added `/memory` command family: `add`, `list`, `edit`, `delete`, `search`, `review`, `reindex`, `import-sessions`.
+- Added `MemoryAdapter` for mem-agent integration with intelligent curation and housekeeping of memories.
+- Added `/memory curate` command and "curate (mem-agent)" TUI panel option for AI-assisted memory curation.
+- Added `/memory housekeeping` command and "housekeeping" TUI panel option for memory database maintenance (dedup, merge, archive, rescope).
+- Added `/memory extract <session-path>` command for extracting atomic memories from session files with chunking support for long sessions.
+- Added `MemAgentConfig` settings for configuring mem-agent LLM connection (`memory.memAgent.enabled`, `model`, `endpoint`, `provider`, `gpuDevice`, `maxTokens`, `temperature`).
+- Added atomic memory format with session backlinks via `SessionReference` type.
+- Added `--dry-run` flag support for `/memory curate` and `/memory housekeeping` commands.
+- Added chunked session extraction with overlap to ensure comprehensive memory capture from long/compacted sessions.
+- mem-agent now enabled by default with graceful fallback to heuristic extraction when unavailable.
+- Added built-in TTS extension (feature-flagged via `tts.enabled`) with F5-TTS voice cloning, persistent server support, per-agent voice selection, and `/tts` command family.
+- Added `--tts-voice <name>` CLI flag and `PI_TTS_VOICE` env var for per-instance voice override when running multiple agents in parallel.
+
+### Changed
+
+- Default resource loading now includes built-in extension factories from core settings, enabling first-party features such as memory without external extension installation.
+- Scope parsing now accepts "user" as an alias for "person" scope type.
+
 ## [0.55.0] - 2026-02-24
 
 ### Breaking Changes
