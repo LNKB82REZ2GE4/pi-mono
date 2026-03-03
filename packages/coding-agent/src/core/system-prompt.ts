@@ -102,13 +102,6 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 	const docsPath = getDocsPath();
 	const examplesPath = getExamplesPath();
 
-<<<<<<< HEAD
-	// Build tools list based on selected tools (only built-in tools with known descriptions)
-	const tools = (selectedTools || ["read", "bash", "edit", "write", "web_search", "web_read"]).filter(
-		(t) => t in toolDescriptions,
-	);
-	const toolsList = tools.length > 0 ? tools.map((t) => `- ${t}: ${toolDescriptions[t]}`).join("\n") : "(none)";
-=======
 	// Build tools list based on selected tools.
 	// Built-ins use toolDescriptions. Custom tools can provide one-line snippets.
 	const tools = selectedTools || ["read", "bash", "edit", "write"];
@@ -121,7 +114,6 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 					})
 					.join("\n")
 			: "(none)";
->>>>>>> upstream/main
 
 	// Build guidelines based on which tools are actually available
 	const guidelinesList: string[] = [];
