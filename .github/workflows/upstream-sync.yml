@@ -85,12 +85,8 @@ jobs:
         run: |
           COMMITS=$(git log --oneline main..upstream/main | head -20)
           BEHIND=${{ steps.check.outputs.behind }}
-          
-          gh pr create \
-            --base main \
-            --head upstream-sync \
-            --title "🔄 Sync upstream: $BEHIND new commit(s)" \
-            --body "$(cat <<'EOF'
+
+          BODY=$(cat <<EOF
           ## Upstream Sync
 
           This PR brings in the latest changes from [badlogic/pi-mono](https://github.com/badlogic/pi-mono).
@@ -110,4 +106,26 @@ jobs:
 
           _This PR was automatically created by the [Upstream Sync](/.github/workflows/upstream-sync.yml) workflow._
           EOF
-          )"
+          )
+
+          PR_JSON=$(gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/pulls" \
+            -f title="🔄 Sync upstream: $BEHIND new commit(s)" \
+            -f head="upstream-sync" \
+            -f base="main" \
+            -f body="$BODY")
+
+          PR_NUMBER=$(echo "$PR_JSON" | jq -r '.number')
+          PR_URL=$(echo "$PR_JSON" | jq -r '.html_url')
+
+          echo "### 🔁 Created PR #$PR_NUMBER" >> $GITHUB_STEP_SUMMARY
+          echo "$PR_URL" >> $GITHUB_STEP_SUMMARY
+
+          if gh api "repos/${GITHUB_REPOSITORY}/labels/upstream-sync" >/dev/null 2>&1; then
+            gh api \
+              --method POST \
+              "repos/${GITHUB_REPOSITORY}/issues/$PR_NUMBER/labels" \
+              -f labels[]="upstream-sync" >/dev/null
+          fi
