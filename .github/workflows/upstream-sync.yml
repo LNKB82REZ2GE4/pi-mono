@@ -110,5 +110,4 @@ jobs:
 
           _This PR was automatically created by the [Upstream Sync](/.github/workflows/upstream-sync.yml) workflow._
           EOF
-          )" \
-            --label "upstream-sync"
+          )"
