@@ -2049,7 +2049,11 @@ export class AgentSession {
 				},
 				getThinkingLevel: () => this.thinkingLevel,
 				setThinkingLevel: (level) => this.setThinkingLevel(level),
-				getScopedModels: () => this.scopedModels,
+				getScopedModels: () =>
+					this.scopedModels.map((entry) => ({
+						model: entry.model,
+						thinkingLevel: entry.thinkingLevel ?? this.thinkingLevel,
+					})),
 			},
 			{
 				getModel: () => this.model,
