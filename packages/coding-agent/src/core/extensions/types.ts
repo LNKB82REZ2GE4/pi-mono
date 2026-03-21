@@ -285,6 +285,21 @@ export interface ExtensionContext {
 	compact(options?: CompactOptions): void;
 	/** Get the current effective system prompt. */
 	getSystemPrompt(): string;
+	/**
+	 * Wait for the agent to finish any in-progress streaming turn.
+	 * Safe to call from any context including event handlers.
+	 */
+	waitForIdle(): Promise<void>;
+	/**
+	 * Start a new session, optionally seeding it with initial messages.
+	 * Safe to call from any context including event handlers and headless daemons.
+	 * Aborts any in-progress turn before switching.
+	 * Returns { cancelled: true } if an extension vetoed the switch.
+	 */
+	newSession(options?: {
+		parentSession?: string;
+		setup?: (sessionManager: SessionManager) => Promise<void>;
+	}): Promise<{ cancelled: boolean }>;
 }
 
 /**
@@ -292,10 +307,10 @@ export interface ExtensionContext {
  * Includes session control methods only safe in user-initiated commands.
  */
 export interface ExtensionCommandContext extends ExtensionContext {
-	/** Wait for the agent to finish streaming */
+	/** @deprecated Use ctx.waitForIdle() — now available on ExtensionContext. */
 	waitForIdle(): Promise<void>;
 
-	/** Start a new session, optionally with initialization. */
+	/** @deprecated Use ctx.newSession() — now available on ExtensionContext. */
 	newSession(options?: {
 		parentSession?: string;
 		setup?: (sessionManager: SessionManager) => Promise<void>;
@@ -1358,11 +1373,18 @@ export interface ExtensionContextActions {
 	getContextUsage: () => ContextUsage | undefined;
 	compact: (options?: CompactOptions) => void;
 	getSystemPrompt: () => string;
+	waitForIdle: () => Promise<void>;
+	newSession: (options?: {
+		parentSession?: string;
+		setup?: (sessionManager: SessionManager) => Promise<void>;
+	}) => Promise<{ cancelled: boolean }>;
 }
 
 /**
  * Actions for ExtensionCommandContext (ctx.* in command handlers).
  * Only needed for interactive mode where extension commands are invokable.
+ * waitForIdle and newSession are now on ExtensionContextActions (base); kept
+ * here for backwards compatibility with existing command handlers.
  */
 export interface ExtensionCommandContextActions {
 	waitForIdle: () => Promise<void>;

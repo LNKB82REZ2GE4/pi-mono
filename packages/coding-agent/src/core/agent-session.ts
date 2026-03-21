@@ -2184,6 +2184,11 @@ export class AgentSession {
 					})();
 				},
 				getSystemPrompt: () => this.systemPrompt,
+				waitForIdle: () => this.agent.waitForIdle(),
+				newSession: async (options) => {
+					const success = await this.newSession(options);
+					return { cancelled: !success };
+				},
 			},
 			{
 				registerProvider: (name, config) => {

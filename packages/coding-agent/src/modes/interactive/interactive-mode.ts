@@ -1220,6 +1220,21 @@ export class InteractiveMode {
 				})();
 			},
 			getSystemPrompt: () => this.session.systemPrompt,
+			waitForIdle: () => this.session.agent.waitForIdle(),
+			newSession: async (options) => {
+				const success = await this.session.newSession(options);
+				if (success) {
+					this.chatContainer.clear();
+					this.pendingMessagesContainer.clear();
+					this.compactionQueuedMessages = [];
+					this.streamingComponent = undefined;
+					this.streamingMessage = undefined;
+					this.pendingTools.clear();
+					this.renderInitialMessages();
+					this.ui.requestRender();
+				}
+				return { cancelled: !success };
+			},
 		});
 
 		// Set up the extension shortcut handler on the default editor

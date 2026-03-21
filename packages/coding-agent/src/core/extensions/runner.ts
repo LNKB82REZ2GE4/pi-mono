@@ -545,6 +545,8 @@ export class ExtensionRunner {
 			getContextUsage: () => this.getContextUsageFn(),
 			compact: (options) => this.compactFn(options),
 			getSystemPrompt: () => this.getSystemPromptFn(),
+			waitForIdle: () => this.waitForIdleFn(),
+			newSession: (options) => this.newSessionHandler(options),
 		};
 	}
 

@@ -77,6 +77,8 @@ describe("ExtensionRunner", () => {
 		getContextUsage: () => undefined,
 		compact: () => {},
 		getSystemPrompt: () => "",
+		waitForIdle: async () => {},
+		newSession: async () => ({ cancelled: false }),
 	};
 
 	describe("shortcut conflicts", () => {
